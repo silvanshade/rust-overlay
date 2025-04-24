@@ -1,7 +1,7 @@
 {
   lib,
   stdenv,
-  symlinkJoin,
+  buildEnv,
   pkgsHostTarget,
   pkgsTargetTarget,
   bash,
@@ -22,7 +22,7 @@ let
   stdenvHostTarget = stdenvSelector pkgsHostTarget;
   stdenvTargetTarget = stdenvSelector pkgsTargetTarget;
 in
-symlinkJoin {
+(buildEnv {
   name = pname + "-" + version;
   inherit pname version;
 
@@ -41,21 +41,6 @@ symlinkJoin {
     tier1TargetPlatforms = rustc.tier1TargetPlatforms or lib.platforms.all;
     badTargetPlatforms = rustc.badTargetPlatforms or [ ];
   };
-
-  # Ourselves have offset -1. In order to make these offset -1 dependencies of downstream derivation,
-  # they are offset 0 propagated.
-
-  # CC for build script linking.
-  # Workaround: should be `pkgsHostHost.cc` but `stdenv`'s cc itself have -1 offset.
-  depsHostHostPropagated = [ stdenvHostTarget.cc ];
-
-  # CC for crate linking.
-  # Workaround: should be `pkgsHostTarget.cc` but `stdenv`'s cc itself have -1 offset.
-  # N.B. WASM targets don't need our CC.
-  propagatedBuildInputs = optional (!targetPlatform.isWasm) stdenvTargetTarget.stdenv.cc;
-
-  # Link dependency for target, required by darwin std.
-  depsTargetTargetPropagated = optional (targetPlatform.isDarwin) pkgsTargetTarget.libiconv;
 
   # If rustc or rustdoc is in the derivation, we need to copy their
   # executable into the final derivation. This is required
@@ -113,12 +98,29 @@ symlinkJoin {
         --replace "@out@" "$out"
     fi
 
-    # symlinkJoin doesn't automatically handle it. Thus do it manually.
+    # buildEnv doesn't automatically handle it. Thus do it manually.
     mkdir -p $out/nix-support
     echo "$depsHostHostPropagated " >$out/nix-support/propagated-host-host-deps
     [[ -z "$propagatedBuildInputs" ]] || echo "$propagatedBuildInputs " >$out/nix-support/propagated-build-inputs
     [[ -z "$depsTargetTargetPropagated" ]] || echo "$depsTargetTargetPropagated " >$out/nix-support/propagated-target-target-deps
   '';
+}).overrideAttrs {
+  # Ourselves have offset -1. In order to make these offset -1 dependencies of downstream derivation,
+  # they are offset 0 propagated.
+
+  # CC for build script linking.
+  # Workaround: should be `pkgsHostHost.cc` but `stdenv`'s cc itself have -1 offset.
+  depsHostHostPropagated = [ stdenv.cc ];
+
+  # CC for crate linking.
+  # Workaround: should be `pkgsHostTarget.cc` but `stdenv`'s cc itself have -1 offset.
+  # N.B. WASM targets don't need our CC.
+  propagatedBuildInputs =
+    optional (!targetPlatform.isWasm) pkgsTargetTarget.stdenv.cc;
+
+  # Link dependency for target, required by darwin std.
+  depsTargetTargetPropagated =
+    optional (targetPlatform.isDarwin) pkgsTargetTarget.libiconv;
 
   meta.platforms = lib.platforms.all;
 }
