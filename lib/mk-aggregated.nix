@@ -2,6 +2,7 @@
   lib,
   stdenv,
   symlinkJoin,
+  pkgsHostTarget,
   pkgsTargetTarget,
   bash,
   curl,
@@ -11,12 +12,15 @@
   pname,
   version,
   date,
+  stdenvSelector,
   selectedComponents,
   availableComponents ? selectedComponents,
 }:
 let
   inherit (lib) optional;
   inherit (stdenv) targetPlatform;
+  stdenvHostTarget = stdenvSelector pkgsHostTarget;
+  stdenvTargetTarget = stdenvSelector pkgsTargetTarget;
 in
 symlinkJoin {
   name = pname + "-" + version;
@@ -43,12 +47,12 @@ symlinkJoin {
 
   # CC for build script linking.
   # Workaround: should be `pkgsHostHost.cc` but `stdenv`'s cc itself have -1 offset.
-  depsHostHostPropagated = [ stdenv.cc ];
+  depsHostHostPropagated = [ stdenvHostTarget.cc ];
 
   # CC for crate linking.
   # Workaround: should be `pkgsHostTarget.cc` but `stdenv`'s cc itself have -1 offset.
   # N.B. WASM targets don't need our CC.
-  propagatedBuildInputs = optional (!targetPlatform.isWasm) pkgsTargetTarget.stdenv.cc;
+  propagatedBuildInputs = optional (!targetPlatform.isWasm) stdenvTargetTarget.stdenv.cc;
 
   # Link dependency for target, required by darwin std.
   depsTargetTargetPropagated = optional (targetPlatform.isDarwin) pkgsTargetTarget.libiconv;
